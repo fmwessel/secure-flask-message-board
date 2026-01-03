@@ -1,0 +1,87 @@
+
+from flask import Flask, request, render_template, redirect, url_for, session, g
+import sqlite3
+import datetime
+import uuid
+from werkzeug.security import generate_password_hash, check_password_has
+
+app = Flask(__name__)
+app.secret_key = "duaneallman"
+
+DATABASE = "database.db"
+
+# In-memory messages store (replace with database later if needed)
+messages = []
+
+def get_db():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+
+        db = get_db()
+        db.execute("INSERT INTO users (username, password) VALUES (?,?)", (username, password))
+        db.commit()
+        db.close()
+        return redirect(url_for("login"))
+
+    return render_template("register.html") 
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+
+        db = get_db()
+        user = db.execute(
+            "SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
+        db.close()
+
+        if user:
+            session["user_id"] = user["id"]
+            return redirect(url_for("index"))
+        else:
+            return "Invalid username or password"
+
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.pop("user_id", None)
+    return redirect(url_for("login"))
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    return render_template("index.html", messages=messages)
+
+@app.route("/post", methods=["POST"])
+def post_message():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+
+    username = request.form.get("username")
+    band_name = request.form.get("band_name")
+    message_text = request.form.get("message")
+
+    messages.append({
+        "id": str(uuid.uuid4()),
+        "username": username,
+        "band_name": band_name,
+        "message": message_text,
+        "timestamp": datetime.datetime.utcnow()
+    })
+
+    return redirect("/")
+
+if __name__ == "__main__":    app.run(host="0.0.0.0", port=5001, debug=True)
+
+
+
